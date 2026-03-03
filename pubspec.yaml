@@ -1,0 +1,56 @@
+name: grad_project
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.8.1
+
+dependencies:
+  image_picker: ^1.0.7
+  flutter:
+    sdk: flutter
+  intl: ^0.19.0
+
+  # 🔹 Firebase
+  firebase_core: ^2.24.0
+  cloud_firestore: ^4.13.0
+
+  # 🔹 Google Maps
+  google_maps_flutter: ^2.5.0
+
+  # 🔹 UI
+  cupertino_icons: ^1.0.8
+  flutter_native_splash: ^2.4.7
+  flutter_launcher_icons: ^0.14.4
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/Frame13.png"
+
+flutter_native_splash:
+  color: "#eef0f4"
+  image: "assets/images/Frame13.png"
+
+  android_12:
+    color: "#eef0f4"
+    image: "assets/images/Frame13.png"
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+
+  fonts:
+    - family: PTSerif
+      fonts:
+        - asset: assets/fonts/pt-serif.regular.ttf
+        - asset: assets/fonts/pt-serif.bold.ttf
+          weight: 700
+
+  assets:
+    - assets/images/

@@ -1,0 +1,67 @@
+{
+  "project_info": {
+    "project_number": "973218163444",
+    "project_id": "my-flutter-course-app",
+    "storage_bucket": "my-flutter-course-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:973218163444:android:97442a4c8faad53a908ca1",
+        "android_client_info": {
+          "package_name": "com.example.course"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB5sZZugiDkeot3jqPcX6EqVGkh9-5Ewao"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:973218163444:android:4b06f18ed81e0bf2908ca1",
+        "android_client_info": {
+          "package_name": "com.example.flutter_application_1"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB5sZZugiDkeot3jqPcX6EqVGkh9-5Ewao"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:973218163444:android:17fc28f3619b6754908ca1",
+        "android_client_info": {
+          "package_name": "com.example.grad_project"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB5sZZugiDkeot3jqPcX6EqVGkh9-5Ewao"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
