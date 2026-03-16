@@ -1,16 +1,106 @@
 import 'package:flutter/material.dart';
+import 'package:grad_project/api_service.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'package:grad_project/navigation_bar.dart';
-
 import '../../map_screen.dart';
 
-class TrackReporttScreen extends StatelessWidget {
+class TrackReporttScreen extends StatefulWidget {
   static const String routeName = "trackk_reportt";
 
   const TrackReporttScreen({super.key});
 
   @override
+  State<TrackReporttScreen> createState() => _TrackReporttScreenState();
+}
+
+class _TrackReporttScreenState extends State<TrackReporttScreen> {
+  bool _isLoading = true;
+  Map<String, dynamic>? _reportDetails;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchReportDetails();
+  }
+
+  Future<void> _fetchReportDetails() async {
+    final url = Uri.parse('${ApiService.baseUrl}/complaints/');
+
+    try {
+      final response = await http.get(
+        url,
+        headers: {"Content-Type": "application/json"},
+      );
+
+      final decodedData = jsonDecode(response.body);
+
+      if (response.statusCode >= 200 &&
+          response.statusCode < 300 &&
+          (decodedData['code'] == 200 || decodedData['code'] == 201)) {
+        
+        Map<String, dynamic> reportData = {};
+        
+        if (decodedData['data'] is List && decodedData['data'].isNotEmpty) {
+          reportData = decodedData['data'].first;
+        } else if (decodedData['data'] is Map) {
+          reportData = decodedData['data'];
+        }
+
+        String rawStatus = reportData['status']?.toString() ?? 'Pending';
+        if (rawStatus.toLowerCase() == 'placed') {
+          rawStatus = 'In Progress';
+        } else if (rawStatus.isNotEmpty) {
+          rawStatus = '${rawStatus[0].toUpperCase()}${rawStatus.substring(1).toLowerCase()}';
+        }
+        reportData['status'] = rawStatus;
+
+        reportData['number'] = reportData['id']?.toString();
+        reportData['location'] = reportData['location_address'];
+        
+        if (reportData['category_name'] != null) {
+          reportData['types'] = [reportData['category_name']];
+        }
+
+        reportData['timeline'] ??= [
+          {'title': 'Report Submitted', 'date': '10/3/2026', 'isActive': true},
+          {'title': 'Under Review', 'date': '10/3/2026', 'isActive': true},
+          {'title': 'In Progress', 'date': '11/3/2026', 'isActive': false},
+          {'title': 'Solved', 'date': 'Pending', 'isActive': false},
+        ];
+
+        if (mounted) {
+          setState(() {
+            _reportDetails = reportData;
+            _isLoading = false;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(decodedData['message'] ?? 'Failed to load report details')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Network error occurred')),
+        );
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final double screenWidth = MediaQuery.of(context).size.width;
+    final String reportNumber = _reportDetails?['number'] ?? '#000000';
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -22,9 +112,9 @@ class TrackReporttScreen extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
         ),
         centerTitle: true,
-        title: const Text(
-          'Track Report#BR2023-452',
-          style: TextStyle(
+        title: Text(
+          'Track Report $reportNumber',
+          style: const TextStyle(
             color: Colors.black,
             fontSize: 18,
             fontWeight: FontWeight.bold,
@@ -32,81 +122,58 @@ class TrackReporttScreen extends StatelessWidget {
           ),
         ),
       ),
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: EdgeInsets.symmetric(
-          horizontal: screenWidth * 0.05,
-          vertical: 10,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Progress Section
-            _buildProgressSection(),
-            const SizedBox(height: 24),
-
-            // Status Card
-            _buildStatusCard(),
-            const SizedBox(height: 24),
-
-            // Photo Section
-            _buildPhotoSection(),
-            const SizedBox(height: 24),
-
-            // Describe Problem Section
-            _buildSectionTitle('Describe Problem'),
-            const SizedBox(height: 12),
-            _buildProblemDescription(),
-            const SizedBox(height: 24),
-
-            // Type Section
-            _buildSectionTitle('Type'),
-            const SizedBox(height: 12),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: EdgeInsets.symmetric(
+                horizontal: screenWidth * 0.05,
+                vertical: 10,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildChip('Roads'),
-                  const SizedBox(width: 12),
-                  _buildChip('Lights'),
-                  const SizedBox(width: 12),
-                  _buildChip('Clean'),
+                  _buildProgressSection(),
+                  const SizedBox(height: 24),
+                  _buildStatusCard(),
+                  const SizedBox(height: 24),
+                  _buildPhotoSection(),
+                  const SizedBox(height: 24),
+                  _buildSectionTitle('Describe Problem'),
+                  const SizedBox(height: 12),
+                  _buildProblemDescription(),
+                  const SizedBox(height: 24),
+                  _buildSectionTitle('Type'),
+                  const SizedBox(height: 12),
+                  _buildTypesSection(),
+                  const SizedBox(height: 24),
+                  _buildSectionTitle('Date'),
+                  const SizedBox(height: 12),
+                  _buildReadOnlyField(_reportDetails?['created_at']?.toString().substring(0, 10) ?? 'N/A'),
+                  const SizedBox(height: 24),
+                  _buildSectionTitle('Location'),
+                  const SizedBox(height: 12),
+                  _buildReadOnlyField(_reportDetails?['location'] ?? 'N/A'),
+                  const SizedBox(height: 24),
+                  _buildSectionTitle('Priority'),
+                  const SizedBox(height: 12),
+                  _buildPriorityBadge(_reportDetails?['priority'] ?? 'Low'),
+                  const SizedBox(height: 24),
+                  _buildSectionTitle('Location on map'),
+                  const SizedBox(height: 12),
+                  _buildMapSection(context),
+                  const SizedBox(height: 40),
                 ],
               ),
             ),
-            const SizedBox(height: 24),
-
-            // Date Section
-            _buildSectionTitle('Date'),
-            const SizedBox(height: 12),
-            _buildReadOnlyField('2/30/2025'),
-            const SizedBox(height: 24),
-
-            // Location Section
-            _buildSectionTitle('Location'),
-            const SizedBox(height: 12),
-            _buildReadOnlyField('Next Snd, Port Road City, Port Said Governorate'),
-            const SizedBox(height: 24),
-
-            // Priority Section
-            _buildSectionTitle('Priority'),
-            const SizedBox(height: 12),
-            _buildPriorityBadge('High'),
-            const SizedBox(height: 24),
-
-            // Location on Map Section
-            _buildSectionTitle('Location on map'),
-            const SizedBox(height: 12),
-            _buildMapSection(context),
-            const SizedBox(height: 40),
-          ],
-        ),
-      ),
       bottomNavigationBar: _buildBottomNavigationBar(),
     );
   }
 
   Widget _buildProgressSection() {
+    final String status = _reportDetails?['status'] ?? 'Unknown';
+    final String number = _reportDetails?['number'] ?? '#000000';
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
@@ -137,18 +204,18 @@ class TrackReporttScreen extends StatelessWidget {
                 ),
               ],
             ),
-            child: const Text(
-              'In Progress',
-              style: TextStyle(
+            child: Text(
+              status,
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
             ),
           ),
-          const Text(
-            '#BR2023-452',
-            style: TextStyle(
+          Text(
+            number,
+            style: const TextStyle(
               color: Colors.black87,
               fontSize: 14,
               fontWeight: FontWeight.w600,
@@ -160,6 +227,8 @@ class TrackReporttScreen extends StatelessWidget {
   }
 
   Widget _buildStatusCard() {
+    final List<dynamic> timeline = _reportDetails?['timeline'] ?? [];
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
@@ -187,28 +256,21 @@ class TrackReporttScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          _buildStatusItem(
-            'Reserved',
-            '2:30 AM - 23/8/2025',
-            const Color(0xFF4CAF50),
-            true,
-            true,
-          ),
-          _buildStatusItem(
-            'Revision',
-            '2:30 AM - 23/8/2025',
-            const Color(0xFF2196F3),
-            true,
-            true,
-          ),
-          _buildStatusItem(
-            'On Hold',
-            '2:30 AM - 23/8/2025',
-            const Color(0xFFFF9800).withOpacity(0.4),
-            false,
-            false,
-            isFaded: true,
-          ),
+          if (timeline.isEmpty)
+            const Text('No status updates available.', style: TextStyle(color: Colors.grey))
+          else
+            ...List.generate(timeline.length, (index) {
+              final item = timeline[index];
+              final isLast = index == timeline.length - 1;
+              return _buildStatusItem(
+                item['title'] ?? '',
+                item['date'] ?? '',
+                item['isActive'] == true ? const Color(0xFF4CAF50) : Colors.grey.withOpacity(0.4),
+                item['isActive'] == true,
+                !isLast,
+                isFaded: item['isActive'] != true,
+              );
+            }),
         ],
       ),
     );
@@ -277,6 +339,8 @@ class TrackReporttScreen extends StatelessWidget {
   }
 
   Widget _buildPhotoSection() {
+    final String? photoUrl = _reportDetails?['photo_url'];
+
     return Container(
       width: double.infinity,
       height: 220,
@@ -312,23 +376,32 @@ class TrackReporttScreen extends StatelessWidget {
               padding: const EdgeInsets.all(12),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16),
-                child: Image.asset(
-                  'assets/images/photo.png',
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      color: Colors.grey[100],
-                      child: const Center(
-                        child: Icon(Icons.image_not_supported, color: Colors.grey),
+                child: photoUrl != null && photoUrl.isNotEmpty
+                    ? Image.network(
+                        photoUrl,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => _buildImagePlaceholder(),
+                      )
+                    : Image.asset(
+                        'assets/images/photo.png',
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => _buildImagePlaceholder(),
                       ),
-                    );
-                  },
-                ),
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildImagePlaceholder() {
+    return Container(
+      color: Colors.grey[100],
+      child: const Center(
+        child: Icon(Icons.image_not_supported, color: Colors.grey),
       ),
     );
   }
@@ -345,6 +418,7 @@ class TrackReporttScreen extends StatelessWidget {
   }
 
   Widget _buildProblemDescription() {
+    final String description = _reportDetails?['description'] ?? 'No description provided.';
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -353,13 +427,31 @@ class TrackReporttScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.grey.withOpacity(0.1)),
       ),
-      child: const Text(
-        'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Odio risus in tortor fermentum habitasse. Sed fermentum aenean erat ipsum facilisis ultrices porttitor. Egestas pharetra morbi tristique consectetur blandit eu dolor. Tellus suscipit rhoncus scelerisque in gravida gravida massa.',
-        style: TextStyle(
+      child: Text(
+        description,
+        style: const TextStyle(
           fontSize: 14,
           color: Colors.black54,
           height: 1.6,
         ),
+      ),
+    );
+  }
+
+  Widget _buildTypesSection() {
+    final List<dynamic> types = _reportDetails?['types'] ?? [];
+    if (types.isEmpty) {
+      return const Text('No types specified.', style: TextStyle(color: Colors.grey));
+    }
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: types.map((type) {
+          return Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: _buildChip(type.toString()),
+          );
+        }).toList(),
       ),
     );
   }
@@ -509,6 +601,6 @@ class TrackReporttScreen extends StatelessWidget {
   }
 
   Widget _buildBottomNavigationBar() {
-    return NavigationBarr(currentIndex: 2,);
+    return const NavigationBarr(currentIndex: 2);
   }
 }

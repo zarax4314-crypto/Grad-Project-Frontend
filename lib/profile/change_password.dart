@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:grad_project/api_service.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class ChangePasswordScreen extends StatefulWidget {
   static const String routeName = "change";
@@ -18,6 +21,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   bool _isOldPasswordVisible = false;
   bool _isNewPasswordVisible = false;
   bool _isRepeatPasswordVisible = false;
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -46,21 +50,62 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     return null;
   }
 
-  void _handleSubmit() {
+  Future<void> _handleSubmit() async {
     if (_formKey.currentState!.validate()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Password changed successfully'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      Future.delayed(const Duration(seconds: 1), () {
-        if (mounted) {
-          // Navigating to ProfileScreen as requested
-          // Assuming ProfileScreen is defined elsewhere in the project
-          Navigator.of(context).pop();
-        }
+      setState(() {
+        _isLoading = true;
       });
+
+      final url = Uri.parse('${ApiService.baseUrl}/auth/reset-password/');
+
+      try {
+        final response = await http.post(
+          url,
+          headers: {"Content-Type": "application/json"},
+          body: jsonEncode({
+            "old_password": _oldPasswordController.text,
+            "new_password": _newPasswordController.text,
+          }),
+        );
+
+        final responseData = jsonDecode(response.body);
+
+        if (response.statusCode >= 200 &&
+            response.statusCode < 300 &&
+            (responseData['code'] == 200 || responseData['code'] == 201)) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Password changed successfully'),
+                backgroundColor: Colors.green,
+              ),
+            );
+            Future.delayed(const Duration(seconds: 1), () {
+              if (mounted) {
+                Navigator.of(context).pop();
+              }
+            });
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(responseData['message'] ?? 'Failed to change password')),
+            );
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Network error occurred')),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      }
     }
   }
 
@@ -215,7 +260,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         ],
       ),
       child: ElevatedButton(
-        onPressed: _handleSubmit,
+        onPressed: _isLoading ? null : _handleSubmit,
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.transparent,
           shadowColor: Colors.transparent,
@@ -223,14 +268,16 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
             borderRadius: BorderRadius.circular(12),
           ),
         ),
-        child: const Text(
-          'Change',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+        child: _isLoading
+            ? const CircularProgressIndicator(color: Colors.white)
+            : const Text(
+                'Change',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
       ),
     );
   }

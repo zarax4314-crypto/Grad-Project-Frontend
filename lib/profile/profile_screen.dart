@@ -1,20 +1,99 @@
 import 'package:flutter/material.dart';
+import 'package:grad_project/api_service.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 import '../navigation_bar.dart';
+import '../auth/login_screen.dart';
 import 'change_password.dart';
 import 'edit_personal_information_screen.dart';
 import 'notification.dart';
 
-/// ProfileScreen is a self-contained Flutter widget that matches the provided Figma design.
-/// It uses Material 3 and is designed for mobile portrait view.
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   static const String routeName = "profile_screen";
 
   const ProfileScreen({super.key});
 
   @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  bool _isLoading = true;
+  Map<String, dynamic>? _profileData;
+  List<dynamic> _userReports = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchProfileData();
+  }
+
+  Future<void> _fetchProfileData() async {
+    final url = Uri.parse('${ApiService.baseUrl}/profile');
+
+    try {
+      final response = await http.get(
+        url,
+        headers: {"Content-Type": "application/json"},
+      );
+
+      final decodedData = jsonDecode(response.body);
+
+      if (response.statusCode >= 200 &&
+          response.statusCode < 300 &&
+          decodedData['code'] == 200) {
+        if (mounted) {
+          setState(() {
+            _profileData = decodedData['data'];
+            _userReports = decodedData['reports'] ?? [];
+            _isLoading = false;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(decodedData['message'] ?? 'Failed to load profile data')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Network error occurred')),
+        );
+      }
+    }
+  }
+
+  Future<void> _logout() async {
+    final url = Uri.parse('${ApiService.baseUrl}/auth/logout/');
+    try {
+      await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"refresh": "dummy-token-for-now"}),
+      );
+    } catch (e) {
+    }
+
+    if (mounted) {
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        LoginScreen.routeName,
+        (route) => false,
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Background color: #F8F9FC
     const backgroundColor = Color(0xFFF8F9FC);
 
     return Scaffold(
@@ -33,138 +112,152 @@ class ProfileScreen extends StatelessWidget {
         ),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 1) Profile Header Card
-              const _ProfileHeaderCard(),
-              const SizedBox(height: 24),
-
-              // 2) Profile Settings Section
-              const _SectionTitle(title: 'Profile Settings'),
-              const SizedBox(height: 12),
-              InkWell(
-                onTap: () {
-                  Navigator.pushNamed(
-                    context,
-                    EditPersonalInformationScreen.routeName,
-                  );
-                },
-                child: const _SettingTile(
-                  icon: Icons.person_outline,
-                  title: 'Edit Personal Information',
-                ),
-              ),
-          InkWell(onTap: (){Navigator.pushNamed(
-            context,
-            ChangePasswordScreen.routeName,
-          );},
-            child:
-            const _SettingTile(
-                icon: Icons.lock_outline,
-                title: 'Change Password',
-              ),),
-
-              InkWell(
-                onTap: () {
-                  Navigator.pushNamed(context, NotificationScreen.routeName);
-                },
-                child: const _SettingTile(
-                  icon: Icons.notifications_none,
-                  title: 'Notification',
-                ),
-              ),
-              const _SettingTile(
-                icon: Icons.language,
-                title: 'Language',
-                isLast: true,
-              ),
-              const SizedBox(height: 24),
-
-              // 3) My Reports Section
-              const _SectionTitle(title: 'My Reports'),
-              const SizedBox(height: 12),
-              const _ReportCard(
-                title: 'Hole on main street',
-                reportId: '#BR2023-452',
-                date: '1/5/2025',
-                status: 'In Progress',
-                statusColor: Color(0xFFFDB022), // Orange
-              ),
-              const _ReportCard(
-                title: 'Hole on main street',
-                reportId: '#BR2023-452',
-                date: '1/5/2025',
-                status: 'Solved',
-                statusColor: Color(0xFF32D583), // Green
-              ),
-              const _ReportCard(
-                title: 'Hole on main street',
-                reportId: '#BR2023-452',
-                date: '1/5/2025',
-                status: 'Cancelled',
-                statusColor: Color(0xFFF04438), // Red
-              ),
-              const SizedBox(height: 24),
-
-              // 4) More Section
-              const _SectionTitle(title: 'More'),
-              const SizedBox(height: 12),
-              const _SettingTile(
-                icon: Icons.settings_outlined,
-                title: 'Settings',
-              ),
-              const _SettingTile(
-                icon: Icons.privacy_tip_outlined,
-                title: 'privacy policy',
-              ),
-              const _SettingTile(
-                icon: Icons.description_outlined,
-                title: 'Terms and Conditions',
-                isLast: true,
-              ),
-              const SizedBox(height: 32),
-
-              // 5) Logout Button
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: OutlinedButton(
-                  onPressed: () {},
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Color(0xFFF04438)),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _ProfileHeaderCard(profileData: _profileData),
+                    const SizedBox(height: 24),
+                    const _SectionTitle(title: 'Profile Settings'),
+                    const SizedBox(height: 12),
+                    InkWell(
+                      onTap: () {
+                        Navigator.pushNamed(
+                          context,
+                          EditPersonalInformationScreen.routeName,
+                        ).then((_) => _fetchProfileData());
+                      },
+                      child: const _SettingTile(
+                        icon: Icons.person_outline,
+                        title: 'Edit Personal Information',
+                      ),
                     ),
-                  ),
-                  child: const Text(
-                    'Logout',
-                    style: TextStyle(
-                      color: Color(0xFFF04438),
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
+                    InkWell(
+                      onTap: () {
+                        Navigator.pushNamed(
+                          context,
+                          ChangePasswordScreen.routeName,
+                        );
+                      },
+                      child: const _SettingTile(
+                        icon: Icons.lock_outline,
+                        title: 'Change Password',
+                      ),
                     ),
-                  ),
+                    InkWell(
+                      onTap: () {
+                        Navigator.pushNamed(
+                          context,
+                          NotificationScreen.routeName,
+                        );
+                      },
+                      child: const _SettingTile(
+                        icon: Icons.notifications_none,
+                        title: 'Notification',
+                      ),
+                    ),
+                    const _SettingTile(
+                      icon: Icons.language,
+                      title: 'Language',
+                      isLast: true,
+                    ),
+                    const SizedBox(height: 24),
+                    const _SectionTitle(title: 'My Reports'),
+                    const SizedBox(height: 12),
+                    if (_userReports.isEmpty)
+                      const Text(
+                        'No reports found.',
+                        style: TextStyle(color: Colors.grey),
+                      )
+                    else
+                      ..._userReports.map((report) {
+                        return _ReportCard(
+                          title: report['title'] ?? 'Unknown',
+                          reportId: report['id']?.toString() ?? '#000',
+                          date: report['date'] ?? 'N/A',
+                          status: report['status'] ?? 'Pending',
+                          statusColor: _getStatusColor(report['status']),
+                        );
+                      }),
+                    const SizedBox(height: 24),
+                    const _SectionTitle(title: 'More'),
+                    const SizedBox(height: 12),
+                    const _SettingTile(
+                      icon: Icons.settings_outlined,
+                      title: 'Settings',
+                    ),
+                    const _SettingTile(
+                      icon: Icons.privacy_tip_outlined,
+                      title: 'Privacy Policy',
+                    ),
+                    const _SettingTile(
+                      icon: Icons.description_outlined,
+                      title: 'Terms and Conditions',
+                      isLast: true,
+                    ),
+                    const SizedBox(height: 32),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 56,
+                      child: OutlinedButton(
+                        onPressed: _logout,
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Color(0xFFF04438)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'Logout',
+                          style: TextStyle(
+                            color: Color(0xFFF04438),
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 40),
+                  ],
                 ),
               ),
-              const SizedBox(height: 40),
-            ],
-          ),
-        ),
       ),
       bottomNavigationBar: const _BottomNavBarPlaceholder(),
     );
   }
+
+  Color _getStatusColor(String? status) {
+    if (status == null) return Colors.grey;
+    switch (status.toLowerCase()) {
+      case 'solved':
+      case 'placed':
+        return const Color(0xFF32D583);
+      case 'in progress':
+        return const Color(0xFFFDB022);
+      case 'cancelled':
+        return const Color(0xFFF04438);
+      default:
+        return Colors.blue;
+    }
+  }
 }
 
-/// Profile Header Card with Gradient and Stats
 class _ProfileHeaderCard extends StatelessWidget {
-  const _ProfileHeaderCard();
+  final Map<String, dynamic>? profileData;
+
+  const _ProfileHeaderCard({required this.profileData});
 
   @override
   Widget build(BuildContext context) {
+    final String name = profileData?['name'] ?? 'Loading...';
+    final String phone = profileData?['phone'] ?? 'Loading...';
+    final String trackStat = profileData?['total_complaints']?.toString() ?? '0';
+    final String solvedStat = profileData?['resolved_complaints']?.toString() ?? '0';
+    final String pointStat = profileData?['points']?.toString() ?? '0';
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -174,8 +267,8 @@ class _ProfileHeaderCard extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Color(0xFF2E90FA), // Bright Blue
-            Color(0xFF1570EF), // Darker Blue
+            Color(0xFF2E90FA),
+            Color(0xFF1570EF),
           ],
         ),
       ),
@@ -193,23 +286,27 @@ class _ProfileHeaderCard extends StatelessWidget {
                 child: const Icon(Icons.person, color: Colors.white, size: 40),
               ),
               const SizedBox(width: 16),
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Ahmed Mohamed',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    'ahmed525@gmail.com',
-                    style: TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                ],
+                    const SizedBox(height: 4),
+                    Text(
+                      phone,
+                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -217,9 +314,9 @@ class _ProfileHeaderCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _StatBox(label: 'Track', value: '5'),
-              _StatBox(label: 'Solved', value: '5'),
-              _StatBox(label: 'Point', value: '5'),
+              _StatBox(label: 'Track', value: trackStat),
+              _StatBox(label: 'Solved', value: solvedStat),
+              _StatBox(label: 'Point', value: pointStat),
             ],
           ),
         ],
@@ -269,7 +366,6 @@ class _StatBox extends StatelessWidget {
   }
 }
 
-/// Section Title
 class _SectionTitle extends StatelessWidget {
   final String title;
 
@@ -288,7 +384,6 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-/// Setting Tile for Settings and More sections
 class _SettingTile extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -337,7 +432,6 @@ class _SettingTile extends StatelessWidget {
   }
 }
 
-/// Report Card for My Reports section
 class _ReportCard extends StatelessWidget {
   final String title;
   final String reportId;
@@ -375,14 +469,18 @@ class _ReportCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Color(0xFF101828),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Color(0xFF101828),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+              const SizedBox(width: 8),
               _StatusBadge(label: status, color: statusColor),
             ],
           ),
@@ -406,7 +504,6 @@ class _ReportCard extends StatelessWidget {
   }
 }
 
-/// Status Badge for Report Card
 class _StatusBadge extends StatelessWidget {
   final String label;
   final Color color;
@@ -433,44 +530,11 @@ class _StatusBadge extends StatelessWidget {
   }
 }
 
-/// Bottom Navigation Bar Placeholder UI
 class _BottomNavBarPlaceholder extends StatelessWidget {
   const _BottomNavBarPlaceholder();
 
   @override
   Widget build(BuildContext context) {
-    return NavigationBarr(currentIndex: 3);
+    return const NavigationBarr(currentIndex: 3);
   }
 }
-
-// class _NavItem extends StatelessWidget {
-//   final IconData icon;
-//   final String label;
-//   final bool isActive;
-//
-//   const _NavItem({
-//     required this.icon,
-//     required this.label,
-//     this.isActive = false,
-//   });
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     final color = isActive ? const Color(0xFF1570EF) : const Color(0xFF667085);
-//     return Column(
-//       mainAxisSize: MainAxisSize.min,
-//       children: [
-//         Icon(icon, color: color, size: 24),
-//         const SizedBox(height: 4),
-//         Text(
-//           label,
-//           style: TextStyle(
-//             color: color,
-//             fontSize: 10,
-//             fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-//           ),
-//         ),
-//       ],
-//     );
-//   }
-// }

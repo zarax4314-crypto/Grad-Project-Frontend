@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:grad_project/api_service.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'package:grad_project/track_report/track_report2.dart';
 import '../navigation_bar.dart';
 
@@ -16,6 +19,23 @@ class ReportModel {
     required this.number,
     required this.status,
   });
+
+  factory ReportModel.fromJson(Map<String, dynamic> json) {
+    String rawStatus = json['status']?.toString() ?? 'Pending';
+    if (rawStatus.toLowerCase() == 'placed') {
+      rawStatus = 'In Progress';
+    } else if (rawStatus.isNotEmpty) {
+      rawStatus = '${rawStatus[0].toUpperCase()}${rawStatus.substring(1).toLowerCase()}';
+    }
+
+    return ReportModel(
+      title: json['title']?.toString() ?? 'No Title',
+      description: json['description']?.toString() ?? 'No Description',
+      location: json['location_address']?.toString() ?? 'No Location',
+      number: json['id']?.toString() ?? '#000000',
+      status: rawStatus,
+    );
+  }
 }
 
 class TrackReportScreen extends StatefulWidget {
@@ -28,54 +48,80 @@ class TrackReportScreen extends StatefulWidget {
 }
 
 class _TrackReportScreenState extends State<TrackReportScreen> {
-  Widget _buildBottomNavigationBar() {
-    return NavigationBarr(currentIndex: 2);
+  List<ReportModel> _allReports = [];
+  bool _isLoading = true;
+  String _selectedFilter = 'All';
+  String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchReports();
   }
 
-  final List<ReportModel> _allReports = [
-    ReportModel(
-      title: 'Hole on main street',
-      description:
-      'There is a large hole on King Fahd Street, causing a danger to cars',
-      location: 'King Fahd Street, Riyadh',
-      number: '#BR2023-452',
-      status: 'Solved',
-    ),
-    ReportModel(
-      title: 'Broken traffic light',
-      description:
-      'Traffic light at intersection of Olaya and Tahlia is not working',
-      location: 'Olaya Street, Riyadh',
-      number: '#BR2023-453',
-      status: 'In Progress',
-    ),
-    ReportModel(
-      title: 'Water leakage',
-      description: 'Water pipe burst near the park, flooding the area',
-      location: 'Al-Malaz Park, Riyadh',
-      number: '#BR2023-454',
-      status: 'Cancelled',
-    ),
-    ReportModel(
-      title: 'Street light out',
-      description:
-      'Several street lights are not working on Prince Sultan Street',
-      location: 'Prince Sultan Street, Jeddah',
-      number: '#BR2023-455',
-      status: 'Solved',
-    ),
-  ];
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
-  String _selectedFilter = 'All';
+  Future<void> _fetchReports() async {
+    final url = Uri.parse('${ApiService.baseUrl}/complaints');
+
+    try {
+      final response = await http.get(
+        url,
+        headers: {"Content-Type": "application/json"},
+      );
+
+      final decodedData = jsonDecode(response.body);
+
+      if (response.statusCode >= 200 &&
+          response.statusCode < 300 &&
+          decodedData['code'] == 200) {
+        final List<dynamic> data = decodedData['data'] ?? [];
+
+        if (mounted) {
+          setState(() {
+            _allReports = data.map((json) => ReportModel.fromJson(json)).toList();
+            _isLoading = false;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(decodedData['message'] ?? 'Failed to load reports')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Network error occurred')),
+        );
+      }
+    }
+  }
 
   List<ReportModel> get _filteredReports {
-    if (_selectedFilter == 'All') {
-      return _allReports;
-    } else {
-      return _allReports
-          .where((report) => report.status == _selectedFilter)
-          .toList();
-    }
+    return _allReports.where((report) {
+      final matchesFilter = _selectedFilter == 'All' || report.status == _selectedFilter;
+      final matchesSearch = _searchQuery.isEmpty ||
+          report.number.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          report.title.toLowerCase().contains(_searchQuery.toLowerCase());
+      return matchesFilter && matchesSearch;
+    }).toList();
+  }
+
+  Widget _buildBottomNavigationBar() {
+    return const NavigationBarr(currentIndex: 2);
   }
 
   @override
@@ -96,8 +142,14 @@ class _TrackReportScreenState extends State<TrackReportScreen> {
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: TextField(
+              controller: _searchController,
+              onChanged: (value) {
+                setState(() {
+                  _searchQuery = value;
+                });
+              },
               decoration: InputDecoration(
-                hintText: 'Search by Track Number',
+                hintText: 'Search by Track Number or Title',
                 suffixIcon: const Icon(Icons.search, color: Colors.grey),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(25),
@@ -156,14 +208,23 @@ class _TrackReportScreenState extends State<TrackReportScreen> {
             ),
           ),
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16.0),
-              itemCount: _filteredReports.length,
-              itemBuilder: (context, index) {
-                final report = _filteredReports[index];
-                return ReportCard(report: report);
-              },
-            ),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _filteredReports.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'No reports found.',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(16.0),
+                        itemCount: _filteredReports.length,
+                        itemBuilder: (context, index) {
+                          final report = _filteredReports[index];
+                          return ReportCard(report: report);
+                        },
+                      ),
           ),
         ],
       ),
@@ -190,7 +251,7 @@ class FilterButton extends StatelessWidget {
       onPressed: onPressed,
       style: ElevatedButton.styleFrom(
         backgroundColor:
-        isSelected ? const Color(0xFF0088FF) : const Color(0xFFEAEAEA),
+            isSelected ? const Color(0xFF0088FF) : const Color(0xFFEAEAEA),
         foregroundColor: isSelected ? Colors.white : Colors.black,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
@@ -208,12 +269,12 @@ class ReportCard extends StatelessWidget {
   const ReportCard({super.key, required this.report});
 
   Color _getStatusColor(String status) {
-    switch (status) {
-      case 'Solved':
+    switch (status.toLowerCase()) {
+      case 'solved':
         return const Color(0xFF27C840);
-      case 'In Progress':
+      case 'in progress':
         return const Color(0xFFFEBC2F);
-      case 'Cancelled':
+      case 'cancelled':
         return const Color(0xFFFF2D55);
       default:
         return Colors.grey;
@@ -265,8 +326,7 @@ class ReportCard extends StatelessWidget {
             const SizedBox(height: 10),
             Text(
               report.title,
-              style:
-              const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             const SizedBox(height: 5),
             Text(report.description),
@@ -311,22 +371,23 @@ class StatusBadge extends StatelessWidget {
   final String status;
   final Color color;
 
-  const StatusBadge(
-      {super.key, required this.status, required this.color});
+  const StatusBadge({
+    super.key,
+    required this.status,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding:
-      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: color,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
         status,
-        style:
-        const TextStyle(color: Colors.white, fontSize: 12),
+        style: const TextStyle(color: Colors.white, fontSize: 12),
       ),
     );
   }

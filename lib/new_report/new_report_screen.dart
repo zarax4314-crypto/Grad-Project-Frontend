@@ -1,7 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:grad_project/api_service.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 import '../navigation_bar.dart';
 import '../review_report.dart';
@@ -28,6 +31,8 @@ class _NewReportScreenState extends State<NewReportScreen> {
 
   final List<String> _reportTypes = ['Roads', 'Lights', 'Clean', 'Other'];
   final List<String> _priorities = ['Low', 'Intermediate', 'High'];
+
+  bool _isLoading = false;
 
   Future<void> _pickImage(ImageSource source) async {
     if (_selectedImages.length >= 4) return;
@@ -71,8 +76,83 @@ class _NewReportScreenState extends State<NewReportScreen> {
     );
     if (picked != null) {
       setState(() {
-        _dateController.text = DateFormat('MM / dd / yyyy').format(picked);
+        _dateController.text = DateFormat('yyyy-MM-dd').format(picked);
       });
+    }
+  }
+
+  Future<void> submitReport() async {
+    if (_problemController.text.isEmpty || _selectedTypes.isEmpty || _selectedPriority.isEmpty || _dateController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill all required fields')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('${ApiService.baseUrl}/complaints/'),
+      );
+
+      request.fields['title'] = _problemController.text.length > 20 
+          ? _problemController.text.substring(0, 20) 
+          : _problemController.text;
+      request.fields['description'] = _problemController.text;
+      request.fields['date'] = _dateController.text;
+      request.fields['location_address'] = _locationController.text.isNotEmpty ? _locationController.text : "Unknown location";
+      request.fields['priority'] = _selectedPriority.toLowerCase();
+      
+      int categoryId = 1; 
+      if (_selectedTypes.contains('Roads')) categoryId = 2;
+      if (_selectedTypes.contains('Lights')) categoryId = 3;
+      if (_selectedTypes.contains('Clean')) categoryId = 4;
+      request.fields['category'] = categoryId.toString();
+
+      request.fields['latitude'] = "31.435658";
+      request.fields['longitude'] = "31.674627";
+
+      for (int i = 0; i < _selectedImages.length; i++) {
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            'media', 
+            _selectedImages[i].path,
+          ),
+        );
+      }
+
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+      var responseData = jsonDecode(response.body);
+
+      if (response.statusCode >= 200 && response.statusCode < 300 && 
+         (responseData['code'] == 200 || responseData['code'] == 201)) {
+        if (mounted) {
+          Navigator.pushNamed(context, ReviewSubmitScreen.routeName);
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(responseData['message'] ?? 'Failed to submit report')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Network error occurred')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -109,7 +189,6 @@ class _NewReportScreenState extends State<NewReportScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            /// ================= Add Photo =================
             _buildSectionCard(
               title: 'Add Photo',
               child: Row(
@@ -133,49 +212,46 @@ class _NewReportScreenState extends State<NewReportScreen> {
               ),
               previewWidget: _selectedImages.isNotEmpty
                   ? Padding(
-                padding: const EdgeInsets.only(top: 16),
-                child: Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: List.generate(
-                    _selectedImages.length,
-                        (index) => Stack(
-                      children: [
-                        Container(
-                          height: 100,
-                          width: 100,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            image: DecorationImage(
-                              image: FileImage(_selectedImages[index]),
-                              fit: BoxFit.cover,
-                            ),
+                      padding: const EdgeInsets.only(top: 16),
+                      child: Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: List.generate(
+                          _selectedImages.length,
+                          (index) => Stack(
+                            children: [
+                              Container(
+                                height: 100,
+                                width: 100,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  image: DecorationImage(
+                                    image: FileImage(_selectedImages[index]),
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                              ),
+                              Positioned(
+                                top: 4,
+                                right: 4,
+                                child: GestureDetector(
+                                  onTap: () => _removeImage(index),
+                                  child: const CircleAvatar(
+                                    radius: 12,
+                                    backgroundColor: Colors.red,
+                                    child: Icon(Icons.close,
+                                        size: 14, color: Colors.white),
+                                  ),
+                                ),
+                              )
+                            ],
                           ),
                         ),
-                        Positioned(
-                          top: 4,
-                          right: 4,
-                          child: GestureDetector(
-                            onTap: () => _removeImage(index),
-                            child: const CircleAvatar(
-                              radius: 12,
-                              backgroundColor: Colors.red,
-                              child: Icon(Icons.close,
-                                  size: 14, color: Colors.white),
-                            ),
-                          ),
-                        )
-                      ],
-                    ),
-                  ),
-                ),
-              )
+                      ),
+                    )
                   : null,
             ),
-
             const SizedBox(height: 20),
-
-            /// ================= Describe =================
             _buildSectionCard(
               title: 'Describe Problem',
               child: TextField(
@@ -196,10 +272,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
                 ),
               ),
             ),
-
             const SizedBox(height: 20),
-
-            /// ================= Type =================
             _buildSectionCard(
               title: 'Type',
               child: Row(
@@ -226,9 +299,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
                 }).toList(),
               ),
             ),
-
             const SizedBox(height: 20),
-
             const Text(
               'Date',
               style: TextStyle(
@@ -238,16 +309,13 @@ class _NewReportScreenState extends State<NewReportScreen> {
               ),
             ),
             const SizedBox(height: 8),
-
             _buildReadOnlyField(
               controller: _dateController,
               hint: '/  /  /',
               suffixIcon: Icons.calendar_today_outlined,
               onTap: _selectDate,
             ),
-
             const SizedBox(height: 20),
-
             const Text(
               'Location',
               style: TextStyle(
@@ -257,17 +325,13 @@ class _NewReportScreenState extends State<NewReportScreen> {
               ),
             ),
             const SizedBox(height: 8),
-
             _buildReadOnlyField(
               controller: _locationController,
-              hint: '',
+              hint: 'Enter address manually',
               suffixIcon: Icons.location_on,
               onTap: () {},
             ),
-
             const SizedBox(height: 20),
-
-            /// ================= Priority =================
             _buildSectionCard(
               title: 'Priority',
               child: Row(
@@ -290,14 +354,13 @@ class _NewReportScreenState extends State<NewReportScreen> {
                 }).toList(),
               ),
             ),
-
             const SizedBox(height: 40),
             _buildSubmitButton(),
             const SizedBox(height: 20),
           ],
         ),
       ),
-      bottomNavigationBar: NavigationBarr(currentIndex: 0),
+      bottomNavigationBar: const NavigationBarr(currentIndex: 0),
     );
   }
 
@@ -354,8 +417,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding:
-        const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
         decoration: BoxDecoration(
           color: isSelected ? const Color(0x3300C0E8) : Colors.white,
           borderRadius: BorderRadius.circular(30),
@@ -398,8 +460,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
             const SizedBox(height: 12),
             Text(
               label,
-              style:
-              const TextStyle(color: Color(0xFF909090), fontSize: 14),
+              style: const TextStyle(color: Color(0xFF909090), fontSize: 14),
             ),
           ],
         ),
@@ -416,8 +477,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding:
-        const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(30),
@@ -426,18 +486,28 @@ class _NewReportScreenState extends State<NewReportScreen> {
         child: Row(
           children: [
             Expanded(
-              child: Text(
-                controller.text.isEmpty ? hint : controller.text,
-                style: TextStyle(
-                  color: controller.text.isEmpty
-                      ? const Color(0xFFD0D0D0)
-                      : Colors.black87,
-                  fontSize: 16,
-                ),
-              ),
+              child: controller.text.isEmpty
+                  ? Text(
+                      hint,
+                      style: const TextStyle(
+                        color: Color(0xFFD0D0D0),
+                        fontSize: 16,
+                      ),
+                    )
+                  : TextField(
+                      controller: controller,
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      style: const TextStyle(
+                        color: Colors.black87,
+                        fontSize: 16,
+                      ),
+                    ),
             ),
-            Icon(suffixIcon,
-                color: const Color(0xFFB0B0B0), size: 22),
+            Icon(suffixIcon, color: const Color(0xFFB0B0B0), size: 22),
           ],
         ),
       ),
@@ -457,24 +527,24 @@ class _NewReportScreenState extends State<NewReportScreen> {
         ),
       ),
       child: ElevatedButton(
-        onPressed: () {Navigator.pushNamed(
-          context,
-          ReviewSubmitScreen.routeName,
-        );},
+        onPressed: _isLoading ? null : submitReport,
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.transparent,
           shadowColor: Colors.transparent,
           shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
-        ),
-        child: const Text(
-          'Review & Submit',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
+            borderRadius: BorderRadius.circular(12),
           ),
         ),
+        child: _isLoading
+            ? const CircularProgressIndicator(color: Colors.white)
+            : const Text(
+                'Review & Submit',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
       ),
     );
   }

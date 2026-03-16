@@ -1,52 +1,111 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:grad_project/api_service.dart';
+import 'package:http/http.dart' as http;
+// ignore: unused_import
+import 'dart:convert';
 import 'package:grad_project/success.dart';
+import 'colors.dart';
 
-class ReviewSubmitScreen extends StatelessWidget {
+class ReviewSubmitScreen extends StatefulWidget {
   static const String routeName = "review_report";
 
   const ReviewSubmitScreen({super.key});
 
   @override
+  State<ReviewSubmitScreen> createState() => _ReviewSubmitScreenState();
+}
+
+class _ReviewSubmitScreenState extends State<ReviewSubmitScreen> {
+  bool _isSubmitting = false;
+
+  Future<void> _submitReport(Map<String, dynamic> reportData) async {
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    final url = Uri.parse('${ApiService.baseUrl}/complaints/');
+
+    try {
+      var request = http.MultipartRequest('POST', url);
+      
+      request.fields['title'] = reportData['title'] ?? 'New Report'; // الحقل ده مطلوب في الباك إند
+      request.fields['description'] = reportData['description'] ?? '';
+      request.fields['date'] = reportData['date'] ?? '';
+      request.fields['location_address'] = reportData['location'] ?? ''; // تغيير الاسم لـ location_address
+      request.fields['priority'] = reportData['priority'] ?? 'Low';
+      request.fields['category'] = (reportData['types'] as List).isNotEmpty 
+          ? reportData['types'][0] 
+          : 'General'; 
+          
+      request.fields['latitude'] = reportData['latitude']?.toString() ?? "31.435658";
+      request.fields['longitude'] = reportData['longitude']?.toString() ?? "31.674627";
+
+      List<File> images = reportData['images'] ?? [];
+      for (var image in images) {
+        request.files.add(await http.MultipartFile.fromPath('media', image.path));
+      }
+
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        if (mounted) {
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            ReportsubmittedScreen.routeName,
+            (route) => false,
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: ${response.statusCode} - ${response.body}')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Network error occurred')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Base design width for responsiveness
+    final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>? ?? {};
+    
+    final String description = args['description'] ?? 'No description provided';
+    final String date = args['date'] ?? 'N/A';
+    final String location = args['location'] ?? 'N/A';
+    final String priority = args['priority'] ?? 'Low';
+    final List<String> types = args['types'] ?? [];
+    final List<File> images = args['images'] ?? [];
+
     const double designWidth = 375.0;
     final double screenWidth = MediaQuery.of(context).size.width;
     final double scale = screenWidth / designWidth;
 
-    // Shadow configuration as per CSS:
-    // box-shadow: 0px 2px 6px 2px #00000026; (26 hex = 0.15 opacity)
-    // box-shadow: 0px 1px 2px 0px #0000004D; (4D hex = 0.30 opacity)
-    final List<BoxShadow> cardShadows = [
-      BoxShadow(
-        color: const Color(0x26000000),
-        offset: const Offset(0, 2),
-        blurRadius: 6,
-        spreadRadius: 2,
-      ),
-      BoxShadow(
-        color: const Color(0x4D000000),
-        offset: const Offset(0, 1),
-        blurRadius: 2,
-        spreadRadius: 0,
-      ),
-    ];
-
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FC),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFFF8F9FC),
+        backgroundColor: AppColors.background,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          'Review & Submit Report',
-          style: TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-          ),
+          'Review & Submit',
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18),
         ),
         centerTitle: true,
       ),
@@ -55,218 +114,122 @@ class ReviewSubmitScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // First Card: Photo
             _buildSectionTitle('Photo', scale),
             _buildCard(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12 * scale),
-                child: Image.asset(
-                  'assets/images/photo.png', // Placeholder matching the question mark aesthetic
-                  fit: BoxFit.contain,
-
-                ),
-              ),
-              shadows: cardShadows,
+              child: images.isNotEmpty 
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.file(images[0], fit: BoxFit.cover, height: 200 * scale, width: double.infinity),
+                  )
+                : const Center(child: Text("No Photo Selected")),
               scale: scale,
             ),
             SizedBox(height: 20 * scale),
 
-            // Second Card: Describe Problem
-            _buildSectionTitle('Describe Problem', scale),
+            _buildSectionTitle('Description', scale),
             _buildCard(
-              child: Container(
-                padding: EdgeInsets.all(12 * scale),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade200),
-                  borderRadius: BorderRadius.circular(12 * scale),
-                ),
-                child: Text(
-                  'Lorem ipsum dolor sit amet consectetur. Odio risus in tortor fermentum habitasse. Sed fermentum aenean erat ipsum facilisis ultrices porttitor. Egestas pharetra morbi tristique consectetur blandit eu dolor. Tellus suscipit rhoncus scelerisque in gravida gravida massa.',
-                  style: TextStyle(
-                    color: Colors.grey.shade600,
-                    fontSize: 14 * scale,
-                    height: 1.5,
-                  ),
-                ),
-              ),
-              shadows: cardShadows,
+              child: Text(description, style: TextStyle(color: Colors.grey.shade700, fontSize: 14 * scale)),
               scale: scale,
             ),
             SizedBox(height: 20 * scale),
 
-            // Third Card: Type
-            _buildSectionTitle('Type', scale),
-            _buildCard(
-              child: Row(
-                children: [
-                  _buildPill('Roads', isSelected: true, scale: scale),
-                  SizedBox(width: 10 * scale),
-                  _buildPill('Lights', isSelected: false, scale: scale),
-                  SizedBox(width: 10 * scale),
-                  _buildPill('Clean', isSelected: false, scale: scale),
-                ],
-              ),
-              shadows: cardShadows,
-              scale: scale,
+            _buildSectionTitle('Category', scale),
+            Wrap(
+              spacing: 8,
+              children: types.map((t) => _buildPill(t, scale: scale)).toList(),
             ),
             SizedBox(height: 20 * scale),
 
-            // Date Field
             _buildLabel('Date', scale),
-            _buildDisabledInput('2/10/2025', scale),
-            SizedBox(height: 20 * scale),
+            _buildDisabledInput(date, scale),
+            SizedBox(height: 15 * scale),
 
-            // Location Field
             _buildLabel('Location', scale),
-            _buildDisabledInput('Port Said, Port Fouad City, Port Said Governorate', scale),
-            SizedBox(height: 20 * scale),
+            _buildDisabledInput(location, scale),
+            SizedBox(height: 15 * scale),
 
-            // Priority Card
-            _buildSectionTitle('Priority', scale),
-            _buildCard(
-              child: Row(
-                children: [
-                  _buildPill('High', isSelected: true, scale: scale),
-                ],
-              ),
-              shadows: cardShadows,
-              scale: scale,
-            ),
-            SizedBox(height: 30 * scale),
+            _buildLabel('Priority', scale),
+            _buildPill(priority, scale: scale, color: const Color(0xFFD9F3FF)),
 
-            // Bottom Buttons Row
+            SizedBox(height: 40 * scale),
+
             Row(
               children: [
                 Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {},
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black,
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(vertical: 16 * scale),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12 * scale),
-                      ),
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      side: const BorderSide(color: Colors.black),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: const Text('Edit', style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: const Text('Edit', style: TextStyle(color: Colors.black)),
                   ),
                 ),
-                SizedBox(width: 15 * scale),
+                const SizedBox(width: 15),
                 Expanded(
                   child: Container(
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF245FF6), Color(0xFF5EC4FA)],
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      ),
-                      borderRadius: BorderRadius.circular(12 * scale),
+                      gradient: const LinearGradient(colors: [AppColors.gradientStart, AppColors.gradientEnd]),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     child: ElevatedButton(
-                      onPressed: () {Navigator.pushNamed(
-                        context,
-                        ReportsubmittedScreen.routeName,
-                      );},
+                      onPressed: _isSubmitting ? null : () => _submitReport(args),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.transparent,
-                        foregroundColor: Colors.white,
                         shadowColor: Colors.transparent,
-                        padding: EdgeInsets.symmetric(vertical: 16 * scale),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12 * scale),
-                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 15),
                       ),
-                      child: const Text('Submit', style: TextStyle(fontWeight: FontWeight.bold)),
+                      child: _isSubmitting 
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : const Text('Submit', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ),
               ],
             ),
-            SizedBox(height: 20 * scale),
+            const SizedBox(height: 30),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSectionTitle(String title, double scale) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: 8 * scale, left: 4 * scale),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 16 * scale,
-          fontWeight: FontWeight.bold,
-          color: Colors.black,
-        ),
-      ),
-    );
-  }
+  Widget _buildSectionTitle(String title, double scale) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Text(title, style: TextStyle(fontSize: 16 * scale, fontWeight: FontWeight.bold)),
+  );
 
-  Widget _buildLabel(String label, double scale) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: 8 * scale, left: 4 * scale),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 14 * scale,
-          fontWeight: FontWeight.w500,
-          color: Colors.black87,
-        ),
-      ),
-    );
-  }
+  Widget _buildLabel(String label, double scale) => Padding(
+    padding: const EdgeInsets.only(bottom: 4),
+    child: Text(label, style: TextStyle(fontSize: 14 * scale, color: Colors.black54)),
+  );
 
-  Widget _buildCard({required Widget child, required List<BoxShadow> shadows, required double scale}) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(16 * scale),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16 * scale),
-        boxShadow: shadows,
-      ),
-      child: child,
-    );
-  }
+  Widget _buildCard({required Widget child, required double scale}) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5, offset: const Offset(0, 2))],
+    ),
+    child: child,
+  );
 
-  Widget _buildPill(String text, {required bool isSelected, required double scale}) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 20 * scale, vertical: 8 * scale),
-      decoration: BoxDecoration(
-        color: isSelected ? const Color(0xFFD9F3FF) : Colors.transparent,
-        borderRadius: BorderRadius.circular(20 * scale),
-        border: Border.all(
-          color: isSelected ? Colors.transparent : Colors.grey.shade300,
-        ),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: Colors.black,
-          fontSize: 14 * scale,
-          fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
-        ),
-      ),
-    );
-  }
+  Widget _buildPill(String text, {required double scale, Color color = const Color(0xFFE0E0E0)}) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(20)),
+    child: Text(text, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+  );
 
-  Widget _buildDisabledInput(String text, double scale) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.symmetric(horizontal: 16 * scale, vertical: 14 * scale),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8F9FC),
-        borderRadius: BorderRadius.circular(12 * scale),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: Colors.grey.shade400,
-          fontSize: 14 * scale,
-        ),
-      ),
-    );
-  }
+  Widget _buildDisabledInput(String text, double scale) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: const Color(0xFFF5F5F5),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: Colors.grey.shade300),
+    ),
+    child: Text(text, style: const TextStyle(color: Colors.black87)),
+  );
 }

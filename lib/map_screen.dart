@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-
+import 'package:grad_project/api_service.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'navigation_bar.dart';
+import 'colors.dart';
 
-class MapScreen extends StatelessWidget {
+class MapScreen extends StatefulWidget {
   static const String routeName = "map";
-
   final String title;
 
   const MapScreen({
@@ -13,70 +15,110 @@ class MapScreen extends StatelessWidget {
     this.title = "Map",
   });
 
-  static const CameraPosition _cameraPosition = CameraPosition(
-    target: LatLng(31.435658, 31.674627), // New Damietta
+  @override
+  State<MapScreen> createState() => _MapScreenState();
+}
+
+class _MapScreenState extends State<MapScreen> {
+  bool _isLoading = true;
+  Set<Marker> _markers = {};
+  
+  static const CameraPosition _initialPosition = CameraPosition(
+    target: LatLng(31.435658, 31.674627), 
     zoom: 14,
   );
 
   @override
+  void initState() {
+    super.initState();
+    _fetchReportLocations();
+  }
+
+  Future<void> _fetchReportLocations() async {
+    // التعديل هنا للمسار الصحيح
+    final url = Uri.parse('${ApiService.baseUrl}/complaints/');
+
+    try {
+      final response = await http.get(url, headers: {"Content-Type": "application/json"});
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final Map<String, dynamic> decodedData = jsonDecode(response.body);
+        final List<dynamic> locations = decodedData['data'] ?? [];
+        
+        if (mounted) {
+          setState(() {
+            _markers = locations.where((loc) => loc['latitude'] != null && loc['longitude'] != null).map((loc) {
+              // تحويل الإحداثيات من String لـ double للتأكيد
+              double lat = double.tryParse(loc['latitude'].toString()) ?? 0.0;
+              double lng = double.tryParse(loc['longitude'].toString()) ?? 0.0;
+
+              return Marker(
+                markerId: MarkerId(loc['id'].toString()),
+                position: LatLng(lat, lng),
+                infoWindow: InfoWindow(
+                  title: loc['location_address'] ?? 'No Address',
+                  snippet: 'Status: ${loc['status']}',
+                ),
+              );
+            }).toSet();
+            _isLoading = false;
+          });
+        }
+      } else {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FC),
-
-      /// ===== AppBar =====
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFFF8F9FC),
+        backgroundColor: AppColors.background,
         elevation: 0,
         centerTitle: true,
-
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () {
-            Navigator.of(context).pop();
-          },
+          onPressed: () => Navigator.of(context).pop(),
         ),
-
-        title: const Text(
-          "Map",
-          style: TextStyle(
+        title: Text(
+          widget.title,
+          style: const TextStyle(
             color: Colors.black,
             fontWeight: FontWeight.w600,
           ),
         ),
-
         actions: const [
           Padding(
             padding: EdgeInsets.only(right: 16),
-            child: Icon(
-              Icons.filter_alt_outlined,
-              color: Colors.black,
-            ),
+            child: Icon(Icons.filter_alt_outlined, color: Colors.black),
           ),
         ],
       ),
-
-      /// ===== Body =====
       body: Stack(
         children: [
-          /// Google Map
           GoogleMap(
-            initialCameraPosition: _cameraPosition,
+            initialCameraPosition: _initialPosition,
             myLocationEnabled: true,
-            zoomControlsEnabled: true,
+            zoomControlsEnabled: false, 
+            markers: _markers,
+            onMapCreated: (controller) {},
           ),
+          
+          if (_isLoading)
+            const Center(child: CircularProgressIndicator()),
 
-          /// Floating Card
           Positioned(
-            bottom: 100,
+            bottom: 30,
             left: 20,
             right: 20,
             child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 18,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
               decoration: BoxDecoration(
-                color: const Color(0xFFEDEDED),
+                color: const Color(0xFFEDEDED).withOpacity(0.95), 
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: const [
                   BoxShadow(
@@ -85,44 +127,25 @@ class MapScreen extends StatelessWidget {
                     blurRadius: 6,
                     spreadRadius: 2,
                   ),
-                  BoxShadow(
-                    color: Color(0x4D000000),
-                    offset: Offset(0, 1),
-                    blurRadius: 2,
-                    spreadRadius: 0,
-                  ),
                 ],
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildStatusButton(
-                    text: "Track\n5",
-                    color: const Color(0xFF1E88E5),
-                  ),
-                  _buildStatusButton(
-                    text: "Solved\n5",
-                    color: const Color(0xFF2ECC71),
-                  ),
-                  _buildStatusButton(
-                    text: "Point\n5",
-                    color: const Color(0xFFF4B400),
-                  ),
+                  _buildStatusButton(text: "Track\n${_markers.length}", color: const Color(0xFF1E88E5)),
+                  _buildStatusButton(text: "Solved\n0", color: AppColors.success),
+                  _buildStatusButton(text: "Point\n0", color: AppColors.warning),
                 ],
               ),
             ),
           ),
         ],
       ),
-
-      /// ===== Bottom Nav =====
-      bottomNavigationBar: _buildBottomNavigationBar(),
+      bottomNavigationBar: const NavigationBarr(currentIndex: 1),
     );
   }
-  Widget _buildStatusButton({
-    required String text,
-    required Color color,
-  }) {
+
+  Widget _buildStatusButton({required String text, required Color color}) {
     return Container(
       width: 80,
       height: 60,
@@ -136,14 +159,10 @@ class MapScreen extends StatelessWidget {
         textAlign: TextAlign.center,
         style: const TextStyle(
           color: Colors.white,
+          fontSize: 12,
           fontWeight: FontWeight.w600,
         ),
       ),
     );
   }
-
 }
-Widget _buildBottomNavigationBar() {
-  return NavigationBarr(currentIndex: 1,);
-}
-

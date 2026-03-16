@@ -1,19 +1,72 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:grad_project/api_service.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import '../map_screen.dart';
 import '../navigation_bar.dart';
 import '../new_report/new_report_screen.dart';
 import '../track_report/track_report.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   static const String routeName = "home";
 
   const HomeScreen({super.key});
 
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
   static const CameraPosition _initialCameraPosition = CameraPosition(
     target: LatLng(31.435658, 31.674627),
     zoom: 13,
   );
+
+  List<dynamic> _recentReports = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    fetchRecentReports();
+  }
+
+  Future<void> fetchRecentReports() async {
+    final url = Uri.parse('${ApiService.baseUrl}/complaints');
+
+    try {
+      final response = await http.get(
+        url,
+        headers: {"Content-Type": "application/json"},
+      );
+
+      final decodedData = jsonDecode(response.body);
+
+      if (response.statusCode >= 200 &&
+          response.statusCode < 300 &&
+          decodedData['code'] == 200) {
+        if (mounted) {
+          setState(() {
+            _recentReports = decodedData['data'] ?? [];
+            _isLoading = false;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -268,28 +321,45 @@ class HomeScreen extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 10.0),
-        ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: 4,
-          itemBuilder: (context, index) {
-            return const Padding(
-              padding: EdgeInsets.only(bottom: 10.0),
-              child: ReportCard(
-                title: 'Pothole in the street...',
-                street: 'King Fahd Street',
-                date: '1/12/2023',
-                status: 'In progress',
-              ),
-            );
-          },
-        ),
+        _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _recentReports.isEmpty
+                ? const Center(
+                    child: Text(
+                      'No recent reports found.',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  )
+                : ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _recentReports.length,
+                    itemBuilder: (context, index) {
+                      final report = _recentReports[index];
+                      
+                      String reportDate = report['date'] ?? '';
+                      if (reportDate.isEmpty && report['created_at'] != null) {
+                        reportDate = report['created_at'].toString().substring(0, 10);
+                      }
+                      if (reportDate.isEmpty) reportDate = 'N/A';
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10.0),
+                        child: ReportCard(
+                          title: report['title'] ?? 'Unknown Issue',
+                          street: report['location_address'] ?? 'Unknown Location',
+                          date: reportDate,
+                          status: report['status'] ?? 'Pending',
+                        ),
+                      );
+                    },
+                  ),
       ],
     );
   }
 
   Widget _buildBottomNavBar() {
-    return NavigationBarr(currentIndex: 0,);
+    return const NavigationBarr(currentIndex: 0);
   }
 }
 
@@ -314,14 +384,12 @@ class ActionButton extends StatelessWidget {
           margin: const EdgeInsets.symmetric(horizontal: 4.0),
           padding: const EdgeInsets.symmetric(vertical: 12.0),
           decoration: BoxDecoration(
-            color: const Color(0xFFFFFFFF), // أبيض
+            color: const Color(0xFFFFFFFF),
             borderRadius: BorderRadius.circular(30.0),
-
-            // شيلنا الـ border لأنه مش موجود في التصميم
             boxShadow: const [
               BoxShadow(
-                color: Color(0x29000000), // #00000029
-                offset: Offset(1, 2),     // x=1 , y=2
+                color: Color(0x29000000),
+                offset: Offset(1, 2),
                 blurRadius: 4,
                 spreadRadius: 0,
               ),
@@ -332,13 +400,13 @@ class ActionButton extends StatelessWidget {
             children: [
               Icon(
                 icon,
-                color: Colors.blue, // الأيقونة أزرق
+                color: Colors.blue,
               ),
               const SizedBox(width: 8.0),
               Text(
                 text,
                 style: const TextStyle(
-                  color: Colors.black, // النص أسود
+                  color: Colors.black,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -445,8 +513,7 @@ class StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding:
-      const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
       decoration: BoxDecoration(
         color: Colors.blue.withOpacity(0.1),
         borderRadius: BorderRadius.circular(15.0),

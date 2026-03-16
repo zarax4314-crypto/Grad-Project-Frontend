@@ -10,18 +10,15 @@ class Responsive {
     _height = size.height;
   }
 
-  // width percentage
   static double w(double percent) {
     return _width * percent;
   }
 
-  // height percentage
   static double h(double percent) {
     return _height * percent;
   }
 
-  // scalable font size (اختياري)
   static double sp(double size) {
-    return size * (_width / 375); // 375 = عرض iPhone reference
+    return size * (_width / 375);
   }
 }

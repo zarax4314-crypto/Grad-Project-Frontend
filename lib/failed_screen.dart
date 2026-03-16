@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'colors.dart';
 
 class ReportUnsubmittedScreen extends StatelessWidget {
   static const String routeName = "failed";
@@ -8,14 +9,14 @@ class ReportUnsubmittedScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: const Color(0xFFF5F7FA),
+        backgroundColor: AppColors.background,
         centerTitle: true,
-        leading: const BackButton(color: Colors.black),
+        leading: const SizedBox.shrink(),
         title: const Text(
-          "Review & Submit Report",
+          "Submission Failed",
           style: TextStyle(
             fontFamily: 'PTSerif',
             fontWeight: FontWeight.w700,
@@ -25,34 +26,48 @@ class ReportUnsubmittedScreen extends StatelessWidget {
         ),
       ),
       body: Center(
-        child: SizedBox(
-          width: 350,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              /// Image
+              /// Failed Image
               Image.asset(
                 "assets/images/failed.png",
                 fit: BoxFit.contain,
+                height: 220, 
               ),
 
-              const SizedBox(height: 49),
+              const SizedBox(height: 40),
 
-              /// Title
+              /// Error Title
               const Text(
                 "Report Unsubmitted",
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontFamily: 'PTSerif',
                   fontWeight: FontWeight.w700,
-                  fontSize: 18,
+                  fontSize: 22,
                   color: Colors.black,
                 ),
               ),
 
-              const SizedBox(height: 49),
+              const SizedBox(height: 12),
 
-              /// Gradient Button
+              /// Error Description
+              const Text(
+                "Something went wrong while sending your report.\nPlease check your internet connection and try again.",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey,
+                  height: 1.5,
+                ),
+              ),
+
+              const SizedBox(height: 50),
+
+              /// Retry Button
               SizedBox(
                 width: double.infinity,
                 height: 56,
@@ -63,8 +78,8 @@ class ReportUnsubmittedScreen extends StatelessWidget {
                       begin: Alignment.centerLeft,
                       end: Alignment.centerRight,
                       colors: [
-                        Color(0xFF245FF6),
-                        Color(0xFF5EC4FA),
+                        AppColors.gradientStart,
+                        AppColors.gradientEnd,
                       ],
                     ),
                   ),
@@ -72,7 +87,9 @@ class ReportUnsubmittedScreen extends StatelessWidget {
                     color: Colors.transparent,
                     child: InkWell(
                       borderRadius: BorderRadius.circular(12),
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.pop(context); 
+                      },
                       child: const Center(
                         child: Text(
                           "Try again",
@@ -86,6 +103,19 @@ class ReportUnsubmittedScreen extends StatelessWidget {
                       ),
                     ),
                   ),
+                ),
+              ),
+              
+              const SizedBox(height: 16),
+              
+              /// Cancel Button
+              TextButton(
+                onPressed: () {
+                  Navigator.pushNamedAndRemoveUntil(context, 'home', (route) => false);
+                },
+                child: const Text(
+                  "Cancel and go Home",
+                  style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600),
                 ),
               ),
             ],
